@@ -66,3 +66,31 @@ def add_heading_styled(doc, text, level, space_before=12, space_after=4):
         run = p.add_run(text)
         format_run(run, font_name="Arial", size_pt=13, bold=True, color_rgb=RGBColor(0x2C, 0x52, 0x82))
     return p
+
+def add_bookmark(paragraph, name):
+    p = paragraph._p
+    bookmark_id = str(hash(name) % 1000000)
+    start = parse_xml(f'<w:bookmarkStart {nsdecls("w")} w:id="{bookmark_id}" w:name="{name}"/>')
+    end = parse_xml(f'<w:bookmarkEnd {nsdecls("w")} w:id="{bookmark_id}"/>')
+    p.insert(0, start)
+    p.append(end)
+
+def add_internal_link(paragraph, name, text):
+    hyperlink = parse_xml(f'<w:hyperlink {nsdecls("w")} w:anchor="{name}"/>')
+    run = parse_xml(f'<w:r {nsdecls("w")}/>')
+    rPr = parse_xml(f'<w:rPr {nsdecls("w")}/>')
+    
+    color = parse_xml(f'<w:color {nsdecls("w")} w:val="1B365D"/>')
+    underline = parse_xml(f'<w:u {nsdecls("w")} w:val="single"/>')
+    rPr.append(color)
+    rPr.append(underline)
+    
+    rPr.append(parse_xml(f'<w:rFonts {nsdecls("w")} w:ascii="Arial" w:hAnsi="Arial"/>'))
+    rPr.append(parse_xml(f'<w:sz {nsdecls("w")} w:val="16"/>'))
+    rPr.append(parse_xml(f'<w:b {nsdecls("w")} w:val="true"/>'))
+    
+    run.append(rPr)
+    t = parse_xml(f'<w:t {nsdecls("w")} xml:space="preserve">{text}</w:t>')
+    run.append(t)
+    hyperlink.append(run)
+    paragraph._p.append(hyperlink)

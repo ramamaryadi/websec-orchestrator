@@ -31,7 +31,9 @@ from .helpers import (
     make_wrappable,
     add_page_number,
     format_run,
-    add_heading_styled
+    add_heading_styled,
+    add_bookmark,
+    add_internal_link
 )
 
 def generate_docx_report(results):
@@ -345,12 +347,19 @@ def generate_docx_report(results):
                     format_run(r_bullet, font_name="Arial", size_pt=9.5, italic=True, color_rgb=RGBColor(0x99, 0x1B, 0x1B))
             else:
                 r1 = c1.paragraphs[0].add_run(val)
-                is_alert = (idx == 4 and defaced_domains > 0) or (idx == 5 and cryptojacking_domains > 0) or (idx == 6 and redirect_domains > 0) or (idx == 7 and info_disclosure_domains > 0) or (idx == 8 and ssl_error_domains > 0)
-                format_run(r1, font_name="Arial", size_pt=11, bold=True if idx in [4, 5, 6, 7, 8] else False, 
+                is_alert = (idx == 3 and inactive_domains > 0) or (idx == 4 and defaced_domains > 0) or (idx == 5 and cryptojacking_domains > 0) or (idx == 6 and redirect_domains > 0) or (idx == 7 and info_disclosure_domains > 0) or (idx == 8 and ssl_error_domains > 0)
+                format_run(r1, font_name="Arial", size_pt=11, bold=True if idx in [3, 4, 5, 6, 7, 8] else False, 
                            color_rgb=RGBColor(0x99, 0x1B, 0x1B) if is_alert else RGBColor(0x2D, 0x37, 0x48))
             
             bg = COLOR_LIGHT_GRAY_HEX if idx % 2 == 1 else "FFFFFF"
-            if idx in [4, 5, 6, 7, 8] and ((idx == 4 and defaced_domains > 0) or (idx == 5 and cryptojacking_domains > 0) or (idx == 6 and redirect_domains > 0) or (idx == 7 and info_disclosure_domains > 0) or (idx == 8 and ssl_error_domains > 0)):
+            if idx in [3, 4, 5, 6, 7, 8] and (
+                (idx == 3 and inactive_domains > 0) or
+                (idx == 4 and defaced_domains > 0) or 
+                (idx == 5 and cryptojacking_domains > 0) or 
+                (idx == 6 and redirect_domains > 0) or 
+                (idx == 7 and info_disclosure_domains > 0) or 
+                (idx == 8 and ssl_error_domains > 0)
+            ):
                 bg = COLOR_ALERT_BG_HEX
             set_cell_background(c0, bg)
             set_cell_background(c1, bg)
@@ -444,7 +453,7 @@ def generate_docx_report(results):
     set_table_margins(results_table, top=60, bottom=60, left=80, right=80)
     
     hdr_cells = results_table.rows[0].cells
-    headers_text = ["No", "Domain", "Status Aktif", "Defacement", "Cryptojacking", "Redirect", "Kebocoran Data", "Rujukan"]
+    headers_text = ["No", "Domain", "Status\nAktif", "Defacement", "Crypto\njacking", "Redirect", "Kebocoran\nData", "Rujukan"]
     for i, title in enumerate(headers_text):
         hdr_cells[i].text = ""
         p = hdr_cells[i].paragraphs[0]
@@ -454,7 +463,7 @@ def generate_docx_report(results):
         set_cell_background(hdr_cells[i], COLOR_PRIMARY_HEX)
         set_cell_vertical_alignment(hdr_cells[i], "center")
         
-    set_column_widths(results_table, [Inches(0.35), Inches(1.8), Inches(0.7), Inches(0.8), Inches(0.8), Inches(0.8), Inches(0.8), Inches(0.55)])
+    set_column_widths(results_table, [Inches(0.35), Inches(1.45), Inches(0.85), Inches(0.8), Inches(0.8), Inches(0.8), Inches(0.8), Inches(0.7)])
     
     affected_count = 0
     for idx, item in enumerate(results_sorted, start=1):
@@ -474,13 +483,17 @@ def generate_docx_report(results):
         else:
             status_aktif_txt = "Aktif" if active else "Nonaktif"
         
-        if defaced or cryptojacking or redirect or info_disclosure or ssl_error:
-            affected_count += 1
-            defacement_txt = "Terdeteksi" if defaced else "Aman"
-            cj_txt = "Terdeteksi" if cryptojacking else "Aman"
-            redir_txt = "Terdeteksi" if redirect else "Aman"
-            id_txt = "Terdeteksi" if info_disclosure else "Aman"
-            rujukan_txt = f"Lampiran {affected_count}"
+        is_vuln = (defaced or cryptojacking or redirect or info_disclosure)
+        if is_vuln or ssl_error:
+            if is_vuln:
+                affected_count += 1
+                rujukan_txt = f"Lampiran {affected_count}"
+            else:
+                rujukan_txt = ""
+            defacement_txt = "❌" if defaced else "✔"
+            cj_txt = "❌" if cryptojacking else "✔"
+            redir_txt = "❌" if redirect else "✔"
+            id_txt = "❌" if info_disclosure else "✔"
             row_bg = COLOR_ALERT_BG_HEX
             txt_color = RGBColor(0x99, 0x1B, 0x1B)
             cell_bold = True
@@ -494,10 +507,10 @@ def generate_docx_report(results):
             txt_color = RGBColor(0x64, 0x74, 0x8B)
             cell_bold = False
         else:
-            defacement_txt = "Aman"
-            cj_txt = "Aman"
-            redir_txt = "Aman"
-            id_txt = "Aman"
+            defacement_txt = "✔"
+            cj_txt = "✔"
+            redir_txt = "✔"
+            id_txt = "✔"
             rujukan_txt = ""
             row_bg = "FFFFFF" if idx % 2 == 0 else COLOR_LIGHT_GRAY_HEX
             txt_color = RGBColor(0x2D, 0x37, 0x48)
@@ -513,56 +526,58 @@ def generate_docx_report(results):
             else:
                 p.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 
-            r = p.add_run(text)
-            
-            # Formatting based on type
-            if i == 2: # Status Aktif
-                if "SSL" in text or "SSL Err" in text or "SSL Error" in text:
-                    format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x99, 0x1B, 0x1B))
+            if i == 7 and rujukan_txt:
+                bookmark_name = f"lampiran_{affected_count}"
+                add_internal_link(p, bookmark_name, text)
+            else:
+                r = p.add_run(text)
+                
+                # Formatting based on type
+                if i == 2: # Status Aktif
+                    if "SSL" in text or "SSL Err" in text or "SSL Error" in text:
+                        format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x99, 0x1B, 0x1B))
+                    else:
+                        format_run(r, font_name="Arial", size_pt=8, bold=cell_bold, color_rgb=txt_color)
+                elif i == 3: # Web Defacement
+                    if defaced:
+                        format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x99, 0x1B, 0x1B))
+                    elif active:
+                        format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x16, 0x65, 0x34))
+                    else:
+                        format_run(r, font_name="Arial", size_pt=8, color_rgb=txt_color)
+                elif i == 4: # Cryptojacking
+                    if cryptojacking:
+                        format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x99, 0x1B, 0x1B))
+                    elif active:
+                        format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x16, 0x65, 0x34))
+                    else:
+                        format_run(r, font_name="Arial", size_pt=8, color_rgb=txt_color)
+                elif i == 5: # Redirect
+                    if redirect:
+                        format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x99, 0x1B, 0x1B))
+                    elif active:
+                        format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x16, 0x65, 0x34))
+                    else:
+                        format_run(r, font_name="Arial", size_pt=8, color_rgb=txt_color)
+                elif i == 6: # Information Disclosure
+                    if info_disclosure:
+                        format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x99, 0x1B, 0x1B))
+                    elif active:
+                        format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x16, 0x65, 0x34))
+                    else:
+                        format_run(r, font_name="Arial", size_pt=8, color_rgb=txt_color)
                 else:
                     format_run(r, font_name="Arial", size_pt=8, bold=cell_bold, color_rgb=txt_color)
-            elif i == 3: # Web Defacement
-                if defaced:
-                    format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x99, 0x1B, 0x1B))
-                elif active:
-                    format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x16, 0x65, 0x34))
-                else:
-                    format_run(r, font_name="Arial", size_pt=8, color_rgb=txt_color)
-            elif i == 4: # Cryptojacking
-                if cryptojacking:
-                    format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x99, 0x1B, 0x1B))
-                elif active:
-                    format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x16, 0x65, 0x34))
-                else:
-                    format_run(r, font_name="Arial", size_pt=8, color_rgb=txt_color)
-            elif i == 5: # Redirect
-                if redirect:
-                    format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x99, 0x1B, 0x1B))
-                elif active:
-                    format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x16, 0x65, 0x34))
-                else:
-                    format_run(r, font_name="Arial", size_pt=8, color_rgb=txt_color)
-            elif i == 6: # Information Disclosure
-                if info_disclosure:
-                    format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x99, 0x1B, 0x1B))
-                elif active:
-                    format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x16, 0x65, 0x34))
-                else:
-                    format_run(r, font_name="Arial", size_pt=8, color_rgb=txt_color)
-            elif i == 7 and rujukan_txt:
-                format_run(r, font_name="Arial", size_pt=8, bold=True, color_rgb=RGBColor(0x1B, 0x36, 0x5D))
-            else:
-                format_run(r, font_name="Arial", size_pt=8, bold=cell_bold, color_rgb=txt_color)
                 
             set_cell_background(cells[i], row_bg)
             set_cell_vertical_alignment(cells[i], "center")
             
-    set_column_widths(results_table, [Inches(0.35), Inches(1.8), Inches(0.7), Inches(0.8), Inches(0.8), Inches(0.8), Inches(0.8), Inches(0.55)])
+    set_column_widths(results_table, [Inches(0.35), Inches(1.45), Inches(0.85), Inches(0.8), Inches(0.8), Inches(0.8), Inches(0.8), Inches(0.7)])
     
     doc.add_paragraph()
 
     # ------------------ SECTION 4: DETAIL TEMUAN ------------------
-    affected_items = [x for x in results if x["defaced"] or x.get("cryptojacking_detected", False) or x.get("redirect_detected", False) or x.get("info_disclosure_detected", False) or x.get("ssl_error", False)]
+    affected_items = [x for x in results_sorted if x["defaced"] or x.get("cryptojacking_detected", False) or x.get("redirect_detected", False) or x.get("info_disclosure_detected", False)]
     if affected_items:
         add_heading_styled(doc, "4. Detail Temuan Kerentanan", level=1)
         p_det_desc = doc.add_paragraph()
@@ -571,12 +586,13 @@ def generate_docx_report(results):
         p_det_desc.paragraph_format.first_line_indent = Inches(0.5)
         p_det_desc.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         r_det_desc = p_det_desc.add_run(
-            "Berikut merupakan rincian temuan keamanan untuk URL yang terindikasi mengalami insiden keamanan Web Defacement / SEO Poisoning, Cryptojacking, Malicious Redirect, Kebocoran Data Sensitif, atau Masalah Sertifikat SSL/TLS:"
+            "Berikut merupakan rincian temuan keamanan untuk URL yang terindikasi mengalami insiden keamanan Web Defacement / SEO Poisoning, Cryptojacking, Malicious Redirect, atau Kebocoran Data Sensitif:"
         )
         format_run(r_det_desc, font_name="Arial", size_pt=11, color_rgb=RGBColor(0x2D, 0x37, 0x48))
         
         for item_idx, item in enumerate(affected_items, start=1):
-            add_heading_styled(doc, f"Lampiran {item_idx}: {item['url'].replace('https://','').replace('http://','')}", level=2)
+            p_heading = add_heading_styled(doc, f"Lampiran {item_idx}: {item['url'].replace('https://','').replace('http://','')}", level=2)
+            add_bookmark(p_heading, f"lampiran_{item_idx}")
             
             detail_table = doc.add_table(rows=6, cols=2)
             set_table_alignment(detail_table)
@@ -611,12 +627,6 @@ def generate_docx_report(results):
                 findings.append(f"Exposed: {', '.join(item['info_disclosure_details'])}")
                 impacts.append("Kebocoran informasi server, variabel kredensial (database/API keys), struktur repositori kode internal, serta detail konfigurasi PHP yang mempermudah penyerangan lanjutan.")
                 descriptions.append("Server membiarkan file konfigurasi sensitif (seperti berkas .env, direktori .git/config, atau halaman pengujian phpinfo.php) dapat diakses secara publik karena kesalahan izin konfigurasi web server.")
-                
-            # if item.get("ssl_error", False):
-            #     categories.append("Kesalahan Konfigurasi Sertifikat SSL/TLS")
-            #     findings.append(f"SSL/TLS Error: {item['ssl_error_details']}")
-            #     impacts.append("Komunikasi data tidak terenkripsi secara aman jika dialihkan ke HTTP, munculnya peringatan keamanan pada peramban web pengguna, dan risiko serangan Man-in-the-Middle (MitM).")
-            #     descriptions.append("Sertifikat SSL/TLS domain tidak valid (misalnya karena hostname mismatch, kedaluwarsa, atau ditandatangani sendiri/self-signed), sehingga koneksi HTTPS aman gagal diverifikasi.")
 
             cat_str = " & ".join(categories)
             findings_str = " | ".join(findings)
